@@ -1,0 +1,7 @@
+{
+  "name": "ResolveIT Enterprise Helpdesk",
+  "description": "Enterprise-grade IT Helpdesk & Incident Management System with Spring Boot 3 / Java 21, React 19, Flyway, PostgreSQL, RBAC, and SLA escalation tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

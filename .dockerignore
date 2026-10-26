@@ -1,0 +1,8 @@
+node_modules
+dist
+.git
+.github
+backups
+*.log
+.DS_Store
+backend/target

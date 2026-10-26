@@ -1,0 +1,819 @@
+# ROLE AND MISSION
+
+Act as a principal software architect, senior Java/Spring Boot engineer, senior React/TypeScript engineer, application security engineer, DevOps engineer, database architect, QA engineer, and UI/UX designer.
+
+Your mission is to DESIGN, IMPLEMENT, TEST, DOCUMENT, AND DELIVER a complete, production-oriented IT Helpdesk / Incident Management application.
+
+This is a serious enterprise software engineering project intended for a public GitHub portfolio and realistic enterprise usage. The final result must demonstrate strong engineering judgment, security, maintainability, usability, testability, and operational readiness.
+
+Do not produce a superficial demo, a static dashboard, a frontend-only mockup, or an API full of TODOs. Every feature presented as implemented must work end to end.
+
+Do not claim that commands, builds, tests, migrations, or containers succeeded unless you actually executed and verified them.
+
+# 1. NON-NEGOTIABLE TECHNOLOGY STACK
+
+Use a monorepo with this exact high-level structure:
+
+it-helpdesk/
+  frontend/
+  backend/
+  infrastructure/
+    docker/
+  docs/
+  scripts/
+  .github/
+    workflows/
+  compose.yaml
+  compose.prod.yaml
+  .env.example
+  .gitignore
+  README.md
+  Makefile
+
+Backend:
+- Java 21 LTS.
+- Latest stable Spring Boot release compatible with Java 21 and the selected Spring Security version; pin a coherent, verified version set.
+- Maven with Maven Wrapper.
+- Spring Web MVC and REST.
+- Spring Security.
+- Spring Data JPA and Hibernate.
+- PostgreSQL.
+- Flyway database migrations.
+- Bean Validation.
+- Spring Boot Actuator.
+- Spring Boot testing, JUnit 5, Mockito, and integration testing with Testcontainers.
+- Springdoc OpenAPI / Swagger UI.
+- Structured application logging.
+- Use MapStruct only if it adds value and can be configured correctly; otherwise use explicit mapping classes.
+- Use Lombok only if it does not obscure domain logic; prefer explicit, readable code.
+
+Frontend:
+- React with TypeScript in strict mode.
+- Vite.
+- React Router.
+- TanStack Query for server state.
+- React Hook Form and Zod for form validation.
+- A consistent component system, preferably shadcn/ui with Tailwind CSS, or an equally maintainable accessible design system.
+- A lightweight chart library for dashboard visualizations.
+- Vitest and React Testing Library.
+- Playwright for critical end-to-end user journeys.
+
+Database:
+- PostgreSQL using a pinned supported image version.
+- Persistent Docker volume.
+- Explicit schema migrations through Flyway.
+- No H2 substitution for PostgreSQL integration tests; use Testcontainers for realistic database tests.
+
+Infrastructure:
+- Docker Engine and Docker Compose.
+- Multi-stage Dockerfiles for frontend and backend.
+- Non-root containers where practical.
+- Health checks, persistent storage, controlled networking, environment-based configuration, and graceful shutdown.
+- A reverse proxy such as Nginx for production frontend delivery and API routing.
+- GitHub Actions for CI.
+
+Do not add unnecessary microservices, Kafka, Kubernetes, Redis, or complex infrastructure without a demonstrated business requirement. Start with a modular monolith backend and a separately deployable React frontend.
+
+Pin all important dependency and image versions. Never invent dependency versions, APIs, or configuration properties. Select compatible stable releases and document your choices.
+
+# 2. ENGINEERING PRINCIPLES
+
+Follow these principles throughout the implementation:
+
+- Production-oriented, maintainable code.
+- SOLID, separation of concerns, composition over inheritance, and dependency inversion.
+- Clear domain boundaries and a modular monolith architecture.
+- DRY without creating unnecessary abstractions.
+- Explicit validation and predictable error handling.
+- Secure by default and least privilege.
+- Database integrity enforced with constraints as well as application validation.
+- No business logic in controllers.
+- No JPA entities serialized directly as API responses.
+- No giant service classes, god objects, or generic catch-all repositories.
+- No hard-coded secrets, production passwords, JWT signing keys, or personal data.
+- No hard-coded business roles or statuses scattered throughout the code.
+- No fake API calls, placeholder buttons, fabricated metrics, or mock data in production mode.
+- Avoid premature abstraction and overengineering.
+- Use immutable DTOs where appropriate and transactional boundaries deliberately.
+- Use Big O and database query performance awareness where it matters.
+- Favor clear code over clever code.
+
+For every significant architectural choice, explain why it is appropriate for this project.
+
+# 3. BACKEND ARCHITECTURE
+
+Use a package-by-feature structure, with explicit separation between domain/business logic, application services, persistence, and HTTP interfaces.
+
+A suggested structure:
+
+backend/src/main/java/com/example/helpdesk/
+  HelpdeskApplication.java
+  config/
+  common/
+    exception/
+    response/
+    validation/
+    logging/
+  security/
+    config/
+    jwt/
+    authentication/
+    authorization/
+  identity/
+  ticket/
+  comment/
+  attachment/
+  category/
+  knowledgebase/
+  sla/
+  notification/
+  audit/
+  dashboard/
+
+Adapt this structure to the final domain design. Avoid creating empty packages.
+
+Each feature should have appropriately separated components such as:
+- Controller or REST adapter.
+- Application/service layer.
+- Repository.
+- Entity and value objects.
+- Request and response DTOs.
+- Validation.
+- Authorization rules.
+- Domain events where justified.
+
+Use constructor injection. Prefer explicit, testable business services. Apply transactions at the application-service boundary. Use read-only transactions for queries where appropriate.
+
+Use pagination and sorting for all potentially large collections. Avoid N+1 queries, unbounded fetches, and exposing unrestricted database entities.
+
+Use optimistic locking with @Version where concurrent modifications could cause lost updates. Use database constraints for critical invariants.
+
+# 4. AUTHENTICATION: JWT
+
+Implement a real, working authentication system using Spring Security and JWT.
+
+Required functionality:
+- User login and logout.
+- User registration only if permitted by the application's account provisioning policy.
+- Administrators can provision and deactivate accounts.
+- Secure password hashing with Argon2id or BCrypt using an appropriate work factor.
+- Short-lived JWT access tokens.
+- Rotating refresh tokens with expiration, revocation, and reuse detection.
+- Persist refresh-token identifiers or hashes securely; never store raw long-lived refresh tokens unnecessarily.
+- Refresh-token revocation on logout and account deactivation.
+- Authentication failure handling and clear HTTP status codes.
+- Protection against brute-force login attempts and abuse through configurable rate limiting.
+- Account status validation.
+- A configurable password policy.
+- No passwords, JWTs, refresh tokens, or sensitive authentication information in logs.
+
+For a browser-based application, prefer keeping the access token in memory and using a Secure, HttpOnly, appropriately configured SameSite cookie for the refresh token. Do not put refresh tokens in localStorage.
+
+Design refresh-token rotation, CSRF protection, cookie settings, logout, and CORS together. If cookies are used, implement and test the necessary CSRF defenses for cookie-authenticated endpoints. Never blindly disable CSRF without explaining the security rationale.
+
+JWT signing keys must be supplied through environment configuration or an appropriate secret-management mechanism, with startup validation. Never use a predictable default production secret.
+
+Validate JWT signature, expiration, issuer, audience when configured, and other relevant claims. Reject malformed, expired, revoked, or invalid tokens.
+
+Do not rely on frontend route guards for security. Enforce authentication and authorization on the backend.
+
+Document the access-token lifecycle, refresh-token lifecycle, cookie configuration, and deployment requirements.
+
+# 5. RBAC: ROLE-BASED ACCESS CONTROL
+
+Implement centralized, server-enforced RBAC with a clear authorization policy.
+
+Initial roles:
+- ADMIN: full administrative authority.
+- IT_MANAGER: oversees incidents, assignment, SLA performance, and reports.
+- IT_AGENT: handles assigned and authorized support incidents.
+- EMPLOYEE: creates and tracks personal requests.
+
+Use Spring Security method-level authorization where appropriate, such as @PreAuthorize, and configure endpoint-level security explicitly.
+
+Centralize authorization rules and avoid duplicating inconsistent role checks across controllers.
+
+Implement object-level authorization as well as role-level authorization:
+- An employee may view and modify only permitted fields of their own tickets.
+- An employee must not access another employee's private tickets by changing an ID.
+- An agent may access tickets within their assigned or explicitly permitted scope.
+- Managers may access tickets and reports within their authorized scope.
+- Only administrators may manage privileged accounts, global configuration, and role assignments.
+- No user may grant themselves a higher role through registration, profile updates, or ticket payloads.
+
+Define a permission matrix and enforce it consistently across REST endpoints and business services.
+
+Include tests proving that forbidden operations return 403 or the appropriate non-disclosing response, not merely that buttons are hidden in React.
+
+# 6. CORE DOMAIN: IT HELPDESK
+
+Build a realistic incident and service-request management workflow.
+
+Ticket fields should include, as appropriate:
+- UUID.
+- Human-readable unique ticket number.
+- Title.
+- Detailed description.
+- Ticket type: INCIDENT or SERVICE_REQUEST.
+- Category and optional subcategory.
+- Priority: LOW, MEDIUM, HIGH, CRITICAL.
+- Severity where it is distinct from priority.
+- Status.
+- Requester.
+- Assigned agent and optional team.
+- Creation and update timestamps.
+- First-response and resolution timestamps.
+- Due dates and SLA deadlines.
+- Resolution summary.
+- Optional asset or affected service reference.
+- Version for optimistic locking.
+- Audit history.
+
+Use a deliberate state machine rather than permitting arbitrary status updates.
+
+Suggested statuses:
+- OPEN.
+- TRIAGED.
+- IN_PROGRESS.
+- PENDING_USER.
+- PENDING_THIRD_PARTY.
+- RESOLVED.
+- CLOSED.
+- REOPENED.
+- CANCELLED.
+
+Define valid transitions, allowed actors, transition preconditions, and required fields. For example, resolving a ticket must require an appropriate resolution summary. Closing, reopening, and cancelling must follow explicit rules.
+
+The exact workflow may be refined, but every permitted transition must be documented and tested.
+
+Implement:
+- Create, view, update, assign, reassign, prioritize, resolve, close, cancel, and reopen tickets according to permissions.
+- Search by ticket number and relevant text.
+- Filter by status, priority, type, category, requester, agent, team, date range, and SLA condition.
+- Paginate and sort results.
+- Add public comments and internal notes with distinct visibility and authorization rules.
+- Maintain ticket history for important changes.
+- Record status changes, assignment changes, priority changes, and other relevant events.
+- Prevent unauthorized changes and duplicate or invalid transitions.
+- Handle concurrent updates safely.
+- Provide a clear timeline of comments, assignments, and status transitions.
+
+All filtering, sorting, pagination, and authorization must be enforced server-side.
+
+# 7. SLA AND ESCALATION
+
+Implement a practical, configurable SLA module.
+
+Include:
+- Configurable first-response and resolution targets based on priority and ticket type.
+- SLA deadlines and breach detection.
+- Time remaining and overdue status.
+- Clear distinction between an SLA breach and a ticket merely being open for a long time.
+- A scheduled job for SLA checks, using appropriate transaction and concurrency handling.
+- Idempotent processing to prevent duplicate breach events.
+- Business-hours and holiday-calendar support if implemented; otherwise clearly identify calendar-time calculations as the initial scope.
+- Manager-visible SLA reports and escalation indicators.
+
+Persist the SLA policy and relevant timestamps so that results remain explainable and auditable.
+
+Do not use an unreliable in-memory scheduler as the only source of SLA truth. The persisted database state must remain authoritative.
+
+# 8. CATEGORIES, TEAMS, ASSETS AND KNOWLEDGE BASE
+
+Implement a useful, permission-controlled administrative module for:
+- Ticket categories and subcategories.
+- Support teams and agent membership.
+- User and agent directory.
+- Optional IT asset inventory with asset tag, type, status, owner, and related tickets.
+- Knowledge-base articles with title, body, category, author, publication state, and timestamps.
+
+Employees should be able to search published knowledge articles before or while creating a ticket.
+
+Prevent unauthorized publication, modification, and deletion. Preserve relationships and history where appropriate. Avoid cascading deletes that could destroy audit history or business records.
+
+# 9. DATABASE DESIGN AND DATA INTEGRITY
+
+Design a normalized PostgreSQL schema appropriate to the domain.
+
+Consider tables for:
+- users.
+- roles and role assignments, or a clearly justified simpler model.
+- refresh_tokens.
+- tickets.
+- categories.
+- teams and team memberships.
+- comments and internal notes.
+- ticket_history or audit events.
+- SLA policies and ticket SLA tracking.
+- knowledge articles.
+- assets if implemented.
+- notifications.
+- attachments metadata if implemented.
+
+Use UUID identifiers where appropriate, foreign keys, unique constraints, check constraints, indexes, and explicit deletion policies.
+
+Create all schema changes through versioned Flyway migrations. Never rely on Hibernate ddl-auto=update in production.
+
+Use UTC for persisted timestamps and a consistent time-zone policy across the application. Use appropriate PostgreSQL types and document the approach.
+
+Add indexes based on actual query patterns, particularly for ticket status, priority, assignment, requester, creation time, ticket number, and SLA deadlines.
+
+Use optimistic locking where needed and ensure transactional consistency for status transitions, assignment, audit events, and related records.
+
+Prevent duplicate ticket numbers, invalid references, and inconsistent SLA state.
+
+Provide realistic development seed data through a separate development-only mechanism. Never seed a production administrator with a publicly known password.
+
+# 10. FILE ATTACHMENTS
+
+If attachments are implemented, make them secure and operational.
+
+Requirements:
+- Configurable file-size limits.
+- Extension and content-type validation.
+- Randomized server-generated storage names.
+- Protection against path traversal and malicious file content.
+- Authorization on every upload and download.
+- Safe download headers.
+- Storage outside the public frontend directory.
+- Docker volume or an appropriate object-storage abstraction.
+- Metadata persisted in PostgreSQL.
+- File retention and deletion rules.
+- No execution of uploaded files.
+
+Do not claim malware scanning exists unless it is actually integrated and configured. Document any remaining limitations.
+
+# 11. NOTIFICATIONS
+
+Implement in-app notifications for relevant events, such as:
+- Ticket creation.
+- Assignment and reassignment.
+- Comments and replies.
+- Status changes.
+- SLA warnings and breaches.
+- Resolution and reopening.
+
+Notifications must respect user permissions and avoid exposing internal notes or sensitive ticket data.
+
+Email delivery can be optional through configurable SMTP settings. The application must remain usable when SMTP is not configured.
+
+If email notifications are implemented, handle delivery failures, retries where appropriate, and duplicate-send risks. Do not expose credentials or raw exception details.
+
+# 12. AUDITABILITY AND SECURITY
+
+Implement a clear distinction between:
+1. Ticket business history.
+2. Security-relevant audit events.
+3. Operational application logs.
+
+Record important events with actor, action, target, timestamp, and relevant non-sensitive metadata.
+
+Do not log passwords, tokens, session identifiers, sensitive personal data, or full internal-note contents unnecessarily.
+
+Protect against:
+- Broken access control and IDOR.
+- SQL injection.
+- Cross-site scripting.
+- CSRF where applicable.
+- Unsafe CORS.
+- Mass assignment.
+- Excessive request payloads.
+- Malicious file uploads.
+- Brute-force login attempts.
+- Sensitive information disclosure.
+- Insecure HTTP security headers.
+- Weak password storage.
+- JWT validation mistakes.
+- Unbounded pagination and resource exhaustion.
+- Secrets committed to Git.
+
+Use DTO allowlists instead of binding requests directly to entities.
+
+Return generic external error messages for unexpected failures while logging useful correlation information server-side.
+
+Configure security headers, request-size limits, appropriate CORS origins, and safe production cookie settings.
+
+Never expose stack traces, SQL statements, credentials, internal filesystem paths, or framework internals in production API responses.
+
+# 13. REST API DESIGN
+
+Use a consistent, versioned API under /api/v1.
+
+Define endpoints for:
+- Authentication.
+- Current-user profile and authorized directory data.
+- Ticket lifecycle.
+- Ticket comments and history.
+- Categories.
+- Teams and assignments.
+- SLA visibility and administration.
+- Knowledge base.
+- Assets if implemented.
+- Notifications.
+- Dashboard statistics.
+- Administration and audit access.
+
+Follow HTTP semantics and use suitable status codes, including 200, 201, 204, 400, 401, 403, 404, 409, 413, 415, 422 where appropriate, 429, and 500.
+
+Use request and response DTOs with explicit validation. Use a consistent error schema, preferably based on RFC 9457 Problem Details.
+
+Include field-level validation errors, a correlation or trace identifier, and safe error messages.
+
+Use a consistent pagination contract and document filtering parameters.
+
+Generate accurate OpenAPI documentation with authentication requirements, request schemas, response schemas, and realistic examples.
+
+Document idempotency where relevant, especially for retry-sensitive operations.
+
+# 14. FRONTEND EXPERIENCE
+
+Build a polished enterprise helpdesk interface, not a generic landing page.
+
+Use React, TypeScript strict mode, reusable components, a clear design system, and responsive layouts.
+
+Create these pages and workflows:
+- Login.
+- Dashboard.
+- My tickets.
+- Create ticket.
+- Ticket detail with activity timeline.
+- Ticket comments and internal notes according to permissions.
+- Agent ticket queue.
+- Assigned-to-me view.
+- Team queue.
+- Ticket assignment and status transition controls.
+- Knowledge base search and article details.
+- Notifications.
+- Profile and account settings.
+- Team, category, and user administration.
+- SLA monitoring.
+- Reports and analytics.
+- Audit viewer restricted to authorized administrators.
+
+Dashboard cards and charts must use actual backend aggregates, not fabricated numbers.
+
+Provide useful ticket tables with search, filtering, sorting, pagination, status badges, priority indicators, SLA warnings, and empty states.
+
+Include loading indicators, skeletons where useful, error states, retry behavior, form validation, success feedback, and confirmation dialogs for destructive or consequential actions.
+
+Ensure responsive behavior on desktop, tablet, and mobile.
+
+Meet WCAG 2.2 AA as a design target: keyboard navigation, focus indicators, semantic structure, accessible labels, sufficient contrast, and accessible validation messages.
+
+Use TanStack Query for server-state caching and invalidation. Avoid redundant global state for server data.
+
+Use React Hook Form and Zod for form handling. Keep frontend validation consistent with backend rules, but treat the backend as authoritative.
+
+Implement centralized API-client configuration, consistent error handling, and typed request/response contracts.
+
+Do not duplicate the backend business logic in React.
+
+Route guards are for user experience only; server-side authorization remains mandatory.
+
+Never put secrets in Vite environment variables. Anything exposed through the frontend build must be treated as public.
+
+Use environment-based configuration for the API base path and document the production routing arrangement.
+
+Do not leave non-functional buttons, placeholder links, fake charts, or hard-coded production users.
+
+# 15. DASHBOARD AND REPORTING
+
+Implement backend-backed aggregates for:
+- Total open tickets.
+- Tickets created during a selected period.
+- Tickets grouped by status.
+- Tickets grouped by priority.
+- Tickets assigned to each agent or team.
+- Average first-response time.
+- Average resolution time.
+- SLA compliance and breaches.
+- Ticket backlog and aging.
+- Resolution trends.
+
+Apply authorization and scope restrictions to all statistics. An employee must not gain access to company-wide sensitive ticket data through dashboard endpoints.
+
+Use efficient SQL/JPA queries and projections. Do not load all ticket entities into memory to calculate dashboard metrics.
+
+Document metric definitions and time ranges to prevent misleading reports.
+
+# 16. DOCKER AND DEPLOYMENT
+
+Everything required to run the application locally must run through Docker Compose, including the frontend, backend, and PostgreSQL.
+
+A developer must not need to install Java, Maven, Node.js, or PostgreSQL on the host just to run the complete development environment. Docker itself is required.
+
+Provide:
+- backend/Dockerfile with a multi-stage build.
+- frontend/Dockerfile with a multi-stage build and a production web server.
+- compose.yaml for local development.
+- compose.prod.yaml for production-oriented deployment.
+- A persistent PostgreSQL volume.
+- Appropriate application configuration.
+- Startup and health checks.
+- A documented database migration strategy.
+- A non-root runtime user where practical.
+- Graceful shutdown.
+- Docker build caching.
+- Appropriate .dockerignore files.
+- A private Docker network for internal services.
+- Only necessary public ports.
+- No publicly exposed PostgreSQL port in the production configuration.
+- Resource limits where supported and useful.
+- Persistent upload storage if attachments are implemented.
+- Logs sent to stdout/stderr.
+- Safe handling of environment variables and secrets.
+
+Use Docker Compose health conditions or another verified startup strategy so that application startup does not depend on timing assumptions.
+
+The backend must verify database connectivity and readiness appropriately. Health endpoints must not reveal sensitive configuration.
+
+Use separate configurations for development and production. Do not bake secrets into images or commit real .env files.
+
+Provide a safe .env.example containing placeholders only.
+
+Explain the difference between build-time frontend variables and runtime backend configuration. Ensure the frontend can reach the API in the browser through the intended reverse proxy, without relying on Docker-only hostnames in browser requests.
+
+For production, prefer same-origin routing such as /api to the backend through Nginx, with correct forwarding headers and TLS termination at the appropriate layer.
+
+Do not run the backend as root. Use a minimal suitable runtime image. Keep build tools out of production runtime images.
+
+Use a sensible restart policy and document backup and restore procedures for PostgreSQL.
+
+Provide commands for clean startup, rebuild, logs, health verification, shutdown, and database backup/restore.
+
+The production Compose file must not silently inherit insecure development defaults.
+
+# 17. TESTING STRATEGY
+
+Build meaningful automated tests at multiple levels.
+
+Backend unit tests:
+- Business rules.
+- Ticket state transitions.
+- Validation.
+- Authorization policy helpers.
+- SLA calculations.
+- Token rotation and expiry logic.
+
+Backend integration tests:
+- PostgreSQL through Testcontainers.
+- Flyway migrations.
+- Repository queries.
+- REST endpoints.
+- Spring Security configuration.
+- JWT validation.
+- Refresh-token rotation and revocation.
+- Role-based and object-level authorization.
+- Concurrent ticket updates.
+- Error response format.
+- Pagination and filters.
+
+Frontend tests:
+- Critical components.
+- Forms and validation.
+- Loading, empty, and error states.
+- Authorization-dependent UI.
+- Ticket creation and interaction workflows.
+
+End-to-end tests:
+1. Administrator provisions a user.
+2. User logs in.
+3. Employee creates a ticket.
+4. Agent sees and claims or receives the ticket.
+5. Agent updates status and adds an appropriate comment.
+6. Unauthorized employee attempts to access another user's ticket and is denied.
+7. Agent resolves the ticket with a resolution summary.
+8. Manager views accurate SLA and reporting data.
+9. Logout and refresh-token revocation behave correctly.
+
+Add tests for invalid inputs, missing fields, expired tokens, forbidden access, duplicate requests, invalid state transitions, and database constraints.
+
+Do not mock every dependency in integration tests. Exercise real PostgreSQL behavior.
+
+Provide a clear command for each test suite and configure coverage reporting. Define a sensible coverage target for critical business and security logic without optimizing for meaningless line coverage.
+
+Never claim tests pass without executing them.
+
+# 18. CI/CD AND CODE QUALITY
+
+Create GitHub Actions workflows that:
+- Build and test the backend.
+- Run the frontend lint, type-check, tests, and production build.
+- Execute database-backed integration tests.
+- Build Docker images.
+- Check formatting and code quality.
+- Perform dependency vulnerability checks.
+- Perform a basic container or image security scan where feasible.
+- Validate Compose configuration.
+
+Use dependency caching safely.
+
+Pin GitHub Actions to reviewed versions and, for higher-assurance workflows, immutable commit SHAs.
+
+Fail CI on compilation errors, type errors, failed tests, and required quality checks.
+
+Do not deploy automatically to production without an explicitly configured and secured deployment environment.
+
+Document how to reproduce CI checks locally.
+
+# 19. OBSERVABILITY AND OPERATIONS
+
+Configure:
+- Spring Boot Actuator.
+- Separate liveness and readiness probes.
+- Structured logs.
+- Correlation IDs or trace IDs.
+- Useful HTTP request metrics.
+- Database connection pool monitoring.
+- Safe error logging.
+- Appropriate log levels for development and production.
+- Operational health checks.
+
+Expose only the minimum required Actuator endpoints. Protect sensitive management endpoints.
+
+Add OpenTelemetry integration only if it can be configured correctly and has a documented use case; do not introduce an unconfigured observability stack merely for appearance.
+
+Document common operational failures and their diagnosis, including database readiness, failed migrations, authentication misconfiguration, and expired or invalid tokens.
+
+# 20. DOCUMENTATION
+
+Produce a comprehensive README.md including:
+- Project overview and screenshots when available.
+- Architecture diagram using Mermaid.
+- Feature list and implementation status.
+- Technology stack.
+- Prerequisites.
+- Repository structure.
+- Quick-start commands.
+- Environment variables.
+- Docker development and production workflows.
+- Test commands.
+- API documentation URL.
+- Default ports.
+- Development account provisioning instructions.
+- Authentication and RBAC design.
+- Database migration strategy.
+- Backup and restore instructions.
+- CI pipeline.
+- Troubleshooting.
+- Known limitations.
+- Security considerations.
+- Production deployment checklist.
+
+Also create:
+- docs/architecture.md.
+- docs/database-design.md with ER diagram.
+- docs/api.md or a link to generated OpenAPI documentation.
+- docs/security.md.
+- docs/rbac-matrix.md.
+- docs/testing.md.
+- docs/deployment.md.
+- docs/adr/ for significant architectural decisions.
+- A Mermaid diagram for the ticket lifecycle.
+
+Keep the documentation consistent with the actual implementation.
+
+# 21. DEVELOPMENT EXPERIENCE
+
+Provide useful root-level commands through a Makefile or equivalent scripts, for example:
+
+make up
+make down
+make build
+make logs
+make test
+make test-backend
+make test-frontend
+make lint
+make health
+make db-backup
+make db-restore
+
+Adapt commands to the actual implementation. Every advertised command must work and must not silently destroy user data.
+
+The initial development setup should be simple and repeatable.
+
+Provide safe development-only account seeding. Credentials must be configurable and must never be reused as production defaults.
+
+Include .gitignore rules for secrets, local environment files, build artifacts, IDE metadata, generated files, and local database data.
+
+# 22. ACCEPTANCE CRITERIA
+
+The application is not complete until the following conditions are satisfied:
+
+1. The monorepo structure is correct and contains distinct frontend and backend applications.
+2. The frontend and backend build successfully.
+3. Docker Compose starts the full application and PostgreSQL.
+4. PostgreSQL data persists after container recreation.
+5. Flyway migrations execute successfully on a clean database.
+6. Authentication works end to end.
+7. Access-token expiry, refresh-token rotation, and logout behave correctly.
+8. RBAC and object-level authorization are enforced server-side.
+9. Core ticket workflows work through the real API.
+10. Comments, internal notes, and ticket history obey authorization rules.
+11. Dashboard statistics come from the database.
+12. SLA calculations are tested and persisted correctly.
+13. Critical backend and frontend tests execute successfully.
+14. API documentation matches actual endpoints.
+15. CI workflows are valid and reproducible.
+16. No production secrets or known default administrator passwords are committed.
+17. No critical feature is represented by a non-functional placeholder.
+18. README instructions work from a clean checkout.
+19. Health checks and operational logs are usable.
+20. Remaining limitations are documented honestly.
+
+# 23. EXECUTION PROTOCOL: WORK IN PHASES
+
+Do not try to generate the entire repository in one enormous response if that would compromise correctness or cause files to be omitted.
+
+Work in explicit, verifiable phases:
+
+PHASE 1 — Requirements and architecture:
+- Identify assumptions and scope.
+- Define the domain model and workflow.
+- Produce the architecture diagram.
+- Produce the RBAC matrix.
+- Design the database schema.
+- Define the API contract.
+- Define security decisions.
+- Define the repository structure.
+- Define the Docker topology.
+- Define implementation milestones and acceptance tests.
+
+PHASE 2 — Backend foundation:
+- Create the Maven project.
+- Configure Spring Boot, PostgreSQL, Flyway, security, validation, logging, and OpenAPI.
+- Implement the domain model and migrations.
+- Implement centralized errors and DTO conventions.
+- Create the first meaningful tests.
+
+PHASE 3 — Authentication and authorization:
+- Implement JWT access tokens and refresh-token rotation.
+- Implement user provisioning, roles, permissions, and object-level access control.
+- Test security behavior.
+
+PHASE 4 — Business features:
+- Implement ticket management and state transitions.
+- Implement comments, internal notes, history, categories, assignment, SLA, notifications, knowledge base, and optional assets.
+- Implement dashboard queries and reports.
+- Test each feature before continuing.
+
+PHASE 5 — Frontend:
+- Implement the design system, routing, login, protected pages, API integration, ticket workflows, dashboards, and administration.
+- Connect all features to the actual backend.
+- Implement responsive layouts and accessible interactions.
+- Test critical user journeys.
+
+PHASE 6 — Docker and operations:
+- Implement development and production Compose configurations.
+- Implement multi-stage Dockerfiles, health checks, reverse proxy, persistence, and safe configuration.
+- Verify startup, migrations, connectivity, and persistence.
+
+PHASE 7 — Quality assurance:
+- Run all builds, tests, linting, type checks, and security checks.
+- Fix all discovered failures.
+- Run critical end-to-end tests where the environment supports them.
+- Verify acceptance criteria.
+- Update documentation.
+
+PHASE 8 — Delivery:
+- Present the final repository tree.
+- Summarize architecture and key decisions.
+- List implemented features and remaining limitations separately.
+- Provide exact commands to start, test, stop, and inspect the application.
+- Report the actual verification results and any tests that could not be executed.
+
+At every phase, produce concrete files and working code rather than only descriptions.
+
+# 24. FILE DELIVERY AND TOOL USAGE RULES
+
+First inspect the capabilities of the current environment and determine whether it supports creating files, editing multiple files, executing shell commands, building projects, running Docker, and testing.
+
+If tools are available, use them to create and verify the actual repository. If only a text interface is available, provide complete file contents in manageable batches with exact paths and continue phase by phase.
+
+Never claim to have created a file that is only described in prose.
+
+Never output ellipses in place of required implementation code, omit critical configuration, or leave TODOs in core security and ticket-management functionality.
+
+If a feature is too large to finish in the current response, identify its status precisely and continue from the last completed checkpoint.
+
+Keep a manifest of created files, completed features, executed commands, test outcomes, and outstanding tasks to avoid losing progress.
+
+Do not ask questions whose answers can be reasonably determined from this specification. State assumptions explicitly and proceed.
+
+# 25. START NOW
+
+Begin with PHASE 1.
+
+Present:
+1. The recommended architecture and justification.
+2. The final monorepo structure.
+3. The domain model and ticket lifecycle.
+4. The database ER diagram in Mermaid.
+5. The RBAC permission matrix.
+6. The API endpoint inventory.
+7. The authentication and token lifecycle.
+8. The Docker Compose service topology.
+9. The implementation plan and acceptance tests.
+
+After Phase 1, continue to implementation in small, coherent, verifiable batches. Do not stop after presenting the architecture. The ultimate goal is a working, tested, Dockerized application, not merely a specification.
